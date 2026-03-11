@@ -1,0 +1,12 @@
+# @package _global_
+# Baseline: MoE Transformer (routing without gradient supervision)
+model:
+  model_name: moe_transformer
+  embed_dim: 256
+  num_heads: 8
+  num_layers: 4
+  num_experts: 8
+  experts_topk: 2
+  use_predictive_attention: false
+  use_latent_topology: false
+  use_gradient_routing: false

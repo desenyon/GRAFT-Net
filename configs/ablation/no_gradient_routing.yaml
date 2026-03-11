@@ -1,0 +1,6 @@
+# Ablation: no gradient routing — uses dense FFN fallback (H2 control)
+defaults:
+  - override /model: graft_net
+
+model:
+  use_gradient_routing: false

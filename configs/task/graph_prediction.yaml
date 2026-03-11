@@ -1,0 +1,9 @@
+name: graph_prediction
+status: experimental  # Lower empirical maturity than seq/ts tracks
+num_nodes: 32
+num_classes: 2
+embed_dim_nodes: 64
+dataset: synthetic
+num_train_samples: 500
+num_val_samples: 100
+edge_prob: 0.3

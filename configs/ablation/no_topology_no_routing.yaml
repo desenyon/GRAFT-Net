@@ -1,0 +1,7 @@
+# Ablation: topology and routing both off
+defaults:
+  - override /model: graft_net
+
+model:
+  use_latent_topology: false
+  use_gradient_routing: false

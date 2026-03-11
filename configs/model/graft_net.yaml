@@ -1,0 +1,30 @@
+name: graft_net
+
+# Core dimensions
+embed_dim: 256
+num_heads: 8
+num_layers: 4
+max_seq_len: 512
+dropout: 0.1
+
+# Predictive attention
+predictor_hidden_dim: 128
+predictor_depth: 1
+use_predictive_attention: true
+
+# Topology
+topology_topk: 4
+topology_edge_hidden: 64
+use_latent_topology: true
+
+# Experts
+num_experts: 8
+experts_topk: 2
+expert_hidden_dim: 512
+use_gradient_routing: true
+
+# Loss weights
+lambda_future: 0.1
+lambda_grad: 0.05
+lambda_topology: 0.01
+lambda_balance: 0.01

@@ -1,0 +1,9 @@
+# Root Hydra config — composes defaults
+defaults:
+  - model: graft_net
+  - compute: local
+  - task: sequence_classification
+  - _self_
+
+seed: 42
+output_dir: outputs/${now:%Y-%m-%d_%H-%M-%S}

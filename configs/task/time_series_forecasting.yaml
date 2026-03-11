@@ -1,0 +1,7 @@
+name: time_series_forecasting
+context_len: 96
+horizon: 24
+input_features: 7
+dataset: synthetic
+num_train_samples: 1000
+num_val_samples: 200

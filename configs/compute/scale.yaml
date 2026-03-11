@@ -1,0 +1,16 @@
+profile: scale
+batch_size: 64
+num_workers: 4
+max_epochs: 50
+learning_rate: 3e-4
+use_amp: true
+
+# Full model dimensions for publication runs
+model:
+  embed_dim: 256
+  num_layers: 6
+  num_heads: 8
+  expert_hidden_dim: 1024
+  predictor_hidden_dim: 256
+  topology_edge_hidden: 128
+  max_seq_len: 512

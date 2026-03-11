@@ -1,0 +1,7 @@
+# Ablation: no predictive attention (H1 control)
+# Tests hypothesis: attention uses predicted future state (H1)
+defaults:
+  - override /model: graft_net
+
+model:
+  use_predictive_attention: false
