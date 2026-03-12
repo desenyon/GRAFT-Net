@@ -61,6 +61,17 @@ htmlcov/
 .ipynb_checkpoints/
 *.ipynb
 
+# AI agent / IDE tool directories
+.agent/
+.claude/
+.codex/
+.cursor/
+.github/skills/
+
+# ML run artifacts (large binaries)
+mlflow.db
+coverage.json
+
 # Hydra outputs
 outputs/
 multirun/
