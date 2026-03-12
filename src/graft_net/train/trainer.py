@@ -9,6 +9,7 @@ from typing import Any
 
 import torch
 import torch.nn as nn
+from torch.cuda.amp import GradScaler
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 
@@ -50,7 +51,7 @@ class Trainer:
 
         # AMP scaler (no-op on CPU)
         self.use_amp = cfg.use_amp and self.device.type == "cuda"
-        self.scaler = torch.amp.GradScaler("cuda") if self.use_amp else None
+        self.scaler = GradScaler() if self.use_amp else None
 
         self._step = 0
         self._mlflow_run_id: str | None = None

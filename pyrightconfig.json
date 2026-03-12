@@ -1,0 +1,9 @@
+{
+  "pythonPath": "/Users/naitikgupta/miniforge3/bin/python",
+  "venvPath": "/Users/naitikgupta/miniforge3",
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "basic",
+  "useLibraryCodeForTypes": true,
+  "reportMissingImports": false,
+  "reportMissingModuleSource": false
+}

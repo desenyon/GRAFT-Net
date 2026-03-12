@@ -34,21 +34,21 @@ def build_model(
     if name == "transformer":
         return StandardTransformer(
             embed_dim=embed_dim, num_layers=num_layers, num_heads=num_heads,
-            ffn_hidden=kwargs.get("ffn_hidden", embed_dim * 2),
+            ffn_hidden=int(kwargs.get("ffn_hidden", embed_dim * 2)),  # type: ignore[arg-type]
         )
 
     if name == "moe_transformer":
         return MoETransformer(
             embed_dim=embed_dim, num_layers=num_layers, num_heads=num_heads,
-            num_experts=kwargs.get("num_experts", 8),
-            experts_topk=kwargs.get("experts_topk", 2),
-            expert_hidden=kwargs.get("expert_hidden", embed_dim * 2),
+            num_experts=int(kwargs.get("num_experts", 8)),  # type: ignore[arg-type]
+            experts_topk=int(kwargs.get("experts_topk", 2)),  # type: ignore[arg-type]
+            expert_hidden=int(kwargs.get("expert_hidden", embed_dim * 2)),  # type: ignore[arg-type]
         )
 
     if name == "graph_transformer":
         return GraphTransformer(
             embed_dim=embed_dim, num_layers=num_layers, num_heads=num_heads,
-            ffn_hidden=kwargs.get("ffn_hidden", embed_dim * 2),
+            ffn_hidden=int(kwargs.get("ffn_hidden", embed_dim * 2)),  # type: ignore[arg-type]
         )
 
     raise ValueError(f"Unknown model name: {name!r}. "
