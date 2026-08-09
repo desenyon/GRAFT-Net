@@ -159,3 +159,84 @@ See [docs/reproducibility.md](docs/reproducibility.md) for the exact commands to
 ## License
 
 MIT
+
+<!-- architecture-atlas-v5:start -->
+## Architecture Atlas v5
+
+These editable Mermaid diagrams mirror the [Notion architecture dossier](https://app.notion.com/p/3b467342e8c181cbace8f16e3a547a9a?pvs=204).
+
+### 1. Mechanism anatomy
+
+```mermaid
+flowchart LR
+  X["Input tokens / hidden states"] --> ENC["Input encoder"]
+  ENC --> FUTURE["Future-state predictor"] --> PATTN["Predictive attention / residual context"]
+  ENC --> NODE["Latent node projection"] --> EDGE["Edge scorer + sparsifier"] --> MSG["Latent graph message passing"]
+  PATTN --> UTIL["Gradient-utility estimator"]
+  MSG --> UTIL
+  UTIL --> ROUTER["Router logits + capacity control"]
+  ROUTER --> E1["Expert 1"]
+  ROUTER --> E2["Expert 2"]
+  ROUTER --> EN["Expert N"]
+  E1 --> FUSE["Weighted expert fusion + residual"]
+  E2 --> FUSE
+  EN --> FUSE
+  FUSE --> HEAD["Task head"]
+  ROUTER --> BAL["Load-balance and entropy regularizers"]
+  HEAD --> LOSS["Task loss + mechanism diagnostics"]
+  BAL --> LOSS
+  LOSS -. gradient utility signal .-> UTIL
+```
+
+### 2. Experiment wiring
+
+```mermaid
+flowchart TB
+  HYDRA["Hydra config<br>architecture, seeds, data, ablations"] --> BUILD["Instantiate GRAFT-Net or matched baseline"]
+  DATA["Seeded synthetic / public dataset"] --> BATCH["Batch and mask pipeline"] --> BUILD
+  BUILD --> TRAIN["Forward + task loss + routing/topology regularizers"] --> BACK["Backprop and optimizer"]
+  BACK --> LOG["MLflow metrics, checkpoints, routing load, entropy, topology sparsity"]
+  LOG --> FIG["Figure and table generator"]
+  MATRIX["Ablation matrix<br>future off / topology off / utility off / expert controls"] --> BUILD
+  BUDGET["Parameter and FLOP matching"] --> BUILD
+  LOG --> COMPARE["Multi-seed uncertainty and baseline comparison"]
+```
+
+### 3. Training narrative
+
+```mermaid
+sequenceDiagram
+  participant I as Input Encoder
+  participant F as Future Predictor
+  participant T as Latent Topology
+  participant R as Utility Router
+  participant E as Expert Bank
+  participant O as Output / Tracking
+  I->>F: current hidden-state sequence
+  I->>T: projected latent nodes
+  F-->>R: predicted future-state residual context
+  T-->>R: sparse non-adjacent graph messages
+  R->>E: token/example assignments with capacity limits
+  E-->>O: weighted expert transformations
+  O->>O: fuse residual stream; compute task and regularization losses
+  O-->>R: gradient-utility signal for routing update
+  O->>O: log mechanism diagnostics and checkpoint provenance
+```
+
+### 4. Research reliability model
+
+```mermaid
+stateDiagram-v2
+  [*] --> BATCH_READY
+  BATCH_READY --> PREDICTING_FUTURE
+  BATCH_READY --> BUILDING_TOPOLOGY
+  PREDICTING_FUTURE --> ROUTING
+  BUILDING_TOPOLOGY --> ROUTING
+  ROUTING --> EXPERT_FORWARD --> FUSING --> LOSS --> BACKPROP --> LOGGED
+  ROUTING --> COLLAPSED: expert starvation or capacity failure
+  BUILDING_TOPOLOGY --> DENSE_NOISE: graph loses sparsity/meaning
+  COLLAPSED --> LOGGED: failure diagnostics
+  DENSE_NOISE --> LOGGED: failure diagnostics
+```
+
+<!-- architecture-atlas-v5:end -->
