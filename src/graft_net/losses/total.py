@@ -26,9 +26,10 @@ def compute_total_loss(
 ) -> dict[str, Tensor]:
     """Compute weighted total loss from model output dict.
 
-    Required keys in outputs:
-        task_loss, future_state, future_target,
-        routing_scores, routing_targets, soft_adjacency, expert_probs (alias for routing_scores)
+    Task models provide task_loss and scalar future_loss, grad_routing_loss,
+    topology_loss, balance_loss (averaged over active layers). Legacy dictionaries
+    with future_state/target, routing_scores/targets, and soft_adjacency still work.
+    Baselines and disabled mechanisms provide zero auxiliary losses.
 
     Returns:
         dict with 'total' plus individual named components.
@@ -37,19 +38,35 @@ def compute_total_loss(
 
     losses["task"] = outputs["task_loss"]
 
-    losses["future"] = future_prediction_loss(
-        outputs["future_state"],
-        outputs["future_target"],
+    losses["future"] = (
+        outputs["future_loss"]
+        if "future_loss" in outputs
+        else future_prediction_loss(
+            outputs["future_state"],
+            outputs["future_target"],
+        )
     )
 
-    losses["grad_routing"] = gradient_prediction_loss(
-        outputs["routing_scores"],
-        outputs["routing_targets"],
+    losses["grad_routing"] = (
+        outputs["grad_routing_loss"]
+        if "grad_routing_loss" in outputs
+        else gradient_prediction_loss(
+            outputs["routing_scores"],
+            outputs["routing_targets"],
+        )
     )
 
-    losses["topology"] = topology_loss(outputs["soft_adjacency"])
+    losses["topology"] = (
+        outputs["topology_loss"]
+        if "topology_loss" in outputs
+        else topology_loss(outputs["soft_adjacency"])
+    )
 
-    losses["balance"] = load_balance_loss(outputs.get("expert_probs", outputs["routing_scores"]))
+    losses["balance"] = (
+        outputs["balance_loss"]
+        if "balance_loss" in outputs
+        else load_balance_loss(outputs.get("expert_probs", outputs["routing_scores"]))
+    )
 
     losses["total"] = (
         losses["task"]

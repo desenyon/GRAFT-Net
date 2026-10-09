@@ -1,0 +1,19 @@
+profile: smoke
+batch_size: 8
+num_workers: 0
+num_threads: 1
+max_epochs: 1
+learning_rate: 0.0001
+use_amp: false
+device: cpu
+sequence_length: 8
+num_train_samples: 24
+num_val_samples: 8
+model:
+  embed_dim: 32
+  num_layers: 2
+  num_heads: 4
+  expert_hidden_dim: 64
+  predictor_hidden_dim: 32
+  topology_edge_hidden: 16
+  max_seq_len: 16

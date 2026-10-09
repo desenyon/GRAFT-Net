@@ -8,7 +8,7 @@ from torch.utils.data import Dataset
 
 
 class SyntheticTimeSeriesDataset(Dataset):
-    """Autoregressive synthetic time series with sinusoidal components."""
+    """Fixed sinusoidal components with independent Gaussian noise."""
 
     def __init__(
         self,

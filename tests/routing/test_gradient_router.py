@@ -14,7 +14,7 @@ def test_topk_route_selects_highest_scoring_experts() -> None:
 
 def test_topk_route_weights_sum_to_one() -> None:
     scores = torch.randn(2, 8, 6)
-    weights, indices = topk_route(scores, k=3)
+    weights, _indices = topk_route(scores, k=3)
     assert torch.allclose(weights.sum(-1), torch.ones(2, 8))
 
 

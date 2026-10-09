@@ -16,7 +16,7 @@ from graft_net.modules.predictive_attention import PredictiveAttention, Predicti
 
 @dataclass
 class BlockOutput:
-    hidden: Tensor                          # (B, N, D) output
+    hidden: Tensor  # (B, N, D) output
     attn_out: PredictiveAttentionOutput
     topo_out: TopologyOutput
     expert_out: ExpertOutput
@@ -55,7 +55,7 @@ class GraftBlock(nn.Module):
 
         # 2. Pre-norm + latent topology + residual
         normed = self.norm2(x)
-        topo_out = self.topology(normed)
+        topo_out = self.topology(normed, attention_mask=attention_mask)
 
         # 3. Gated fusion of attention and topology streams
         gate = self.fusion_gate(torch.cat([attn_out.attended, topo_out.graph_state], dim=-1))

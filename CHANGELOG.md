@@ -5,6 +5,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [Unreleased]
+
+- Route train/evaluate/ablation/benchmark commands through actual configured tasks
+  and registered backbones; persist resolved configuration and run evidence.
+- Add task gradients to hard top-k topology through a straight-through estimator,
+  detached first-order routing utility supervision across every GRAFT block,
+  padding-aware auxiliaries, and explicit disabled-mechanism losses.
+- Correct topology entropy regularization and per-token utility KL normalization.
+- Add sample-weighted evaluation, task metrics, AdamW warmup, optional tracking,
+  and metadata-rich optimizer/RNG checkpoints with tested exact CPU resume.
+- Add real CLI, gradient, ablation, baseline, reproducibility and padding regressions.
+- Replace unsupported README/reproducibility claims with implementation contracts;
+  distinguish recorded figures from explicitly labeled artificial demonstrations.
+- Make lint, formatting, type checking and package-build checks executable.
+
 ## [0.1.0] — 2026-03-11
 
 ### Added
@@ -77,4 +92,4 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-[0.1.0]: https://github.com/your-org/GRAFT-Net/releases/tag/v0.1.0
+[0.1.0]: https://github.com/desenyon/GRAFT-Net/releases/tag/v0.1.0

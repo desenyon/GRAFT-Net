@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import torch
 import torch.nn.functional as F
 from torch import Tensor
 
@@ -19,6 +18,6 @@ def topk_route(scores: Tensor, k: int) -> tuple[Tensor, Tensor]:
         indices: (B, N, k) indices of selected experts.
     """
     k = min(k, scores.shape[-1])
-    top_scores, indices = scores.topk(k, dim=-1)        # (B, N, k)
-    weights = F.softmax(top_scores, dim=-1)             # (B, N, k)
+    top_scores, indices = scores.topk(k, dim=-1)  # (B, N, k)
+    weights = F.softmax(top_scores, dim=-1)  # (B, N, k)
     return weights, indices

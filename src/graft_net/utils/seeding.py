@@ -8,7 +8,7 @@ import torch
 
 
 def set_seed(seed: int) -> None:
-    """Set random seeds for reproducibility across Python, NumPy, and PyTorch."""
+    """Set random seeds for reproducibility across Python and PyTorch."""
     random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():

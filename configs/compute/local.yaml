@@ -1,11 +1,14 @@
 profile: local
 batch_size: 8
 num_workers: 0
+num_threads: 1
 max_epochs: 5
-learning_rate: 1e-4
+learning_rate: 0.0001
 use_amp: false
-
-# Smoke-friendly model overrides
+device: cpu
+sequence_length: 32
+num_train_samples: 256
+num_val_samples: 64
 model:
   embed_dim: 64
   num_layers: 2
@@ -13,4 +16,4 @@ model:
   expert_hidden_dim: 128
   predictor_hidden_dim: 64
   topology_edge_hidden: 32
-  max_seq_len: 64
+  max_seq_len: 32

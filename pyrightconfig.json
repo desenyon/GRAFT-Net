@@ -1,9 +1,8 @@
 {
-  "pythonPath": "/Users/naitikgupta/miniforge3/bin/python",
-  "venvPath": "/Users/naitikgupta/miniforge3",
-  "pythonVersion": "3.12",
+  "include": ["src/graft_net"],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.11",
   "typeCheckingMode": "basic",
-  "useLibraryCodeForTypes": true,
-  "reportMissingImports": false,
-  "reportMissingModuleSource": false
+  "useLibraryCodeForTypes": true
 }

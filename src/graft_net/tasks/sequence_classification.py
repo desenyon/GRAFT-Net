@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from graft_net.models.backbone import GraftNetBackbone
 from graft_net.models.config import GraftNetConfig
 from graft_net.models.heads import SequenceClassificationHead
+from graft_net.models.registry import build_backbone
+from graft_net.tasks.auxiliary import auxiliary_outputs
 
 
 class SequenceClassificationModel(nn.Module):
@@ -26,12 +26,18 @@ class SequenceClassificationModel(nn.Module):
         super().__init__()
         if cfg is None:
             from dataclasses import replace
+
             cfg = GraftNetConfig()
-            cfg = replace(cfg, embed_dim=embed_dim, num_layers=num_layers,
-                          num_heads=num_heads, num_classes=num_classes)
+            cfg = replace(
+                cfg,
+                embed_dim=embed_dim,
+                num_layers=num_layers,
+                num_heads=num_heads,
+                num_classes=num_classes,
+            )
         self.cfg = cfg
-        self.backbone = GraftNetBackbone(cfg)
-        self.head = SequenceClassificationHead(cfg.embed_dim, num_classes, dropout=cfg.dropout)
+        self.backbone = build_backbone(cfg)
+        self.head = SequenceClassificationHead(cfg.embed_dim, cfg.num_classes, dropout=cfg.dropout)
 
     def forward(self, batch: dict[str, Tensor]) -> dict[str, Tensor]:
         """
@@ -49,17 +55,8 @@ class SequenceClassificationModel(nn.Module):
         logits = self.head(backbone_out.hidden, attention_mask=mask)
         task_loss = F.cross_entropy(logits, labels)
 
-        # Collect outputs needed for total loss
-        last_block = backbone_out.all_block_outputs[-1]
-        # Use next-layer hidden as proxy future target (stop-gradiented)
-        future_target = backbone_out.hidden  # for single-stage, use final hidden as target
-
         return {
             "logits": logits,
             "task_loss": task_loss,
-            "future_state": last_block.attn_out.future_state,
-            "future_target": future_target,
-            "routing_scores": last_block.expert_out.routing_scores,
-            "routing_targets": last_block.expert_out.routing_scores,  # placeholder; trainer computes real targets
-            "soft_adjacency": last_block.topo_out.soft_adjacency,
+            **auxiliary_outputs(backbone_out, task_loss, self.cfg, self.training, mask),
         }

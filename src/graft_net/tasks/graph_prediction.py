@@ -10,9 +10,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from graft_net.models.backbone import GraftNetBackbone
 from graft_net.models.config import GraftNetConfig
 from graft_net.models.heads import GraphClassificationHead
+from graft_net.models.registry import build_backbone
+from graft_net.tasks.auxiliary import auxiliary_outputs
 
 
 class GraphPredictionModel(nn.Module):
@@ -32,13 +33,21 @@ class GraphPredictionModel(nn.Module):
         super().__init__()
         if cfg is None:
             from dataclasses import replace
+
             cfg = GraftNetConfig()
-            cfg = replace(cfg, embed_dim=embed_dim, num_layers=num_layers,
-                          num_heads=num_heads, num_classes=num_classes)
+            cfg = replace(
+                cfg,
+                embed_dim=embed_dim,
+                num_layers=num_layers,
+                num_heads=num_heads,
+                num_classes=num_classes,
+            )
         self.cfg = cfg
-        self.node_proj = nn.Linear(embed_dim, embed_dim)  # optional re-projection
-        self.backbone = GraftNetBackbone(cfg)
-        self.head = GraphClassificationHead(embed_dim, num_classes, dropout=cfg.dropout)
+        self.node_proj = nn.Linear(
+            cfg.node_input_dim or cfg.embed_dim, cfg.embed_dim
+        )  # optional re-projection
+        self.backbone = build_backbone(cfg)
+        self.head = GraphClassificationHead(cfg.embed_dim, cfg.num_classes, dropout=cfg.dropout)
 
     def forward(self, batch: dict[str, Tensor]) -> dict[str, Tensor]:
         """
@@ -47,21 +56,21 @@ class GraphPredictionModel(nn.Module):
             adjacency:     (B, N, N) float (optional hint; topology is learned)
             labels:        (B,) long
         """
-        x = batch["node_features"]               # (B, N, D)
+        x = batch["node_features"]  # (B, N, D)
         labels = batch["labels"]
 
         x_proj = self.node_proj(x)
-        backbone_out = self.backbone(x_proj)
+        kwargs = (
+            {"adjacency": batch.get("adjacency")}
+            if self.cfg.model_name == "graph_transformer"
+            else {}
+        )
+        backbone_out = self.backbone(x_proj, **kwargs)
         logits = self.head(backbone_out.hidden)
         task_loss = F.cross_entropy(logits, labels)
 
-        last_block = backbone_out.all_block_outputs[-1]
         return {
             "logits": logits,
             "task_loss": task_loss,
-            "future_state": last_block.attn_out.future_state,
-            "future_target": backbone_out.hidden,
-            "routing_scores": last_block.expert_out.routing_scores,
-            "routing_targets": last_block.expert_out.routing_scores,
-            "soft_adjacency": last_block.topo_out.soft_adjacency,
+            **auxiliary_outputs(backbone_out, task_loss, self.cfg, self.training),
         }

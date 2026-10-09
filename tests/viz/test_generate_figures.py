@@ -21,7 +21,7 @@ def test_plot_training_curves_writes_output(tmp_path: Path) -> None:
 def test_plot_topology_graph_writes_output(tmp_path: Path) -> None:
     from graft_net.viz.topology_graphs import plot_topology_graph
 
-    adj = (torch.rand(2, 5, 5) > 0.6)
+    adj = torch.rand(2, 5, 5) > 0.6
     output_path = tmp_path / "topology.png"
     plot_topology_graph(adj, output_path)
     assert output_path.exists()

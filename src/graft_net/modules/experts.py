@@ -18,10 +18,11 @@ from graft_net.routing.gradient_router import topk_route
 
 @dataclass
 class ExpertOutput:
-    output: Tensor           # (B, N, D)
-    routing_scores: Tensor   # (B, N, E) predicted utility logits
+    output: Tensor  # (B, N, D)
+    routing_scores: Tensor  # (B, N, E) predicted utility logits
     selected_experts: Tensor  # (B, N, k) indices of chosen experts
-    expert_load: Tensor      # (E,) fraction of tokens routed to each expert
+    expert_load: Tensor  # (E,) fraction of tokens routed to each expert
+    expert_values: Tensor | None = None  # detached candidate outputs (B, N, E, D)
 
 
 class _Expert(nn.Module):
@@ -46,7 +47,6 @@ class GradientRoutedExperts(nn.Module):
         self.cfg = cfg
         d = cfg.embed_dim
         e = cfg.num_experts
-        k = cfg.experts_topk
 
         # Utility predictor: predicts learned gradient usefulness per expert
         self.utility_predictor = nn.Sequential(
@@ -56,10 +56,9 @@ class GradientRoutedExperts(nn.Module):
         )
 
         # Expert pool
-        self.experts = nn.ModuleList([
-            _Expert(d, cfg.expert_hidden_dim, d, cfg.dropout)
-            for _ in range(e)
-        ])
+        self.experts = nn.ModuleList(
+            [_Expert(d, cfg.expert_hidden_dim, d, cfg.dropout) for _ in range(e)]
+        )
 
         # Dense FFN fallback (used when use_gradient_routing=False)
         self.dense_ffn = nn.Sequential(
@@ -70,11 +69,11 @@ class GradientRoutedExperts(nn.Module):
         )
 
     def forward(self, x: Tensor) -> ExpertOutput:
-        b, n, d = x.shape
+        b, n, _d = x.shape
         e = self.cfg.num_experts
         k = self.cfg.experts_topk
 
-        routing_scores = self.utility_predictor(x)     # (B, N, E)
+        routing_scores = self.utility_predictor(x)  # (B, N, E)
 
         if not self.cfg.use_gradient_routing:
             # Dense FFN bypass — routing scores still computed for loss compatibility
@@ -86,22 +85,15 @@ class GradientRoutedExperts(nn.Module):
                 expert_load=torch.full((e,), 1.0 / e, device=x.device),
             )
 
-        weights, indices = topk_route(routing_scores, k=k)   # (B,N,k), (B,N,k)
+        weights, indices = topk_route(routing_scores, k=k)  # (B,N,k), (B,N,k)
 
-        # Gather expert outputs
-        output = torch.zeros(b, n, d, device=x.device, dtype=x.dtype)
-        expert_counts = torch.zeros(e, device=x.device)
-
-        for ei, expert in enumerate(self.experts):
-            # Mask: which (b, n) positions chose expert ei?
-            chosen = (indices == ei)                           # (B, N, k) bool
-            if not chosen.any():
-                continue
-            # Weight for this expert at each position: sum over k-dim
-            w = (weights * chosen.float()).sum(-1)             # (B, N)
-            out_ei = expert(x)                                 # (B, N, D)
-            output += w.unsqueeze(-1) * out_ei
-            expert_counts[ei] = chosen.float().sum()
+        # Dense candidate evaluation provides counterfactual values for utility
+        # supervision. Dispatch is top-k, but this reference implementation is
+        # deliberately not a sparse-compute MoE kernel.
+        values = torch.stack([expert(x) for expert in self.experts], dim=-2)
+        dense_weights = torch.zeros_like(routing_scores).scatter(-1, indices, weights)
+        output = (dense_weights.unsqueeze(-1) * values).sum(-2)
+        expert_counts = torch.bincount(indices.flatten(), minlength=e).to(x.dtype)
 
         total = expert_counts.sum().clamp(min=1.0)
         expert_load = expert_counts / total
@@ -111,4 +103,5 @@ class GradientRoutedExperts(nn.Module):
             routing_scores=routing_scores,
             selected_experts=indices,
             expert_load=expert_load,
+            expert_values=values.detach(),
         )

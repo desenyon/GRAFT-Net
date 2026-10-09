@@ -1,30 +1,26 @@
-name: graft_net
-
-# Core dimensions
-embed_dim: 256
-num_heads: 8
-num_layers: 4
-max_seq_len: 512
+embed_dim: ${compute.model.embed_dim}
+num_heads: ${compute.model.num_heads}
+num_layers: ${compute.model.num_layers}
+max_seq_len: ${compute.model.max_seq_len}
 dropout: 0.1
-
-# Predictive attention
-predictor_hidden_dim: 128
+predictor_hidden_dim: ${compute.model.predictor_hidden_dim}
 predictor_depth: 1
 use_predictive_attention: true
-
-# Topology
 topology_topk: 4
-topology_edge_hidden: 64
+topology_edge_hidden: ${compute.model.topology_edge_hidden}
 use_latent_topology: true
-
-# Experts
 num_experts: 8
 experts_topk: 2
-expert_hidden_dim: 512
+expert_hidden_dim: ${compute.model.expert_hidden_dim}
 use_gradient_routing: true
-
-# Loss weights
 lambda_future: 0.1
 lambda_grad: 0.05
 lambda_topology: 0.01
 lambda_balance: 0.01
+model_name: graft_net
+learning_rate: ${compute.learning_rate}
+weight_decay: 0.01
+warmup_steps: 0
+max_grad_norm: 1.0
+use_amp: ${compute.use_amp}
+seed: ${seed}

@@ -17,8 +17,13 @@ def test_gradient_routed_experts_preserve_shape() -> None:
 
 
 def test_gradient_routed_experts_ablation_uses_dense_ffn() -> None:
-    cfg = GraftNetConfig(embed_dim=32, num_experts=4, experts_topk=2,
-                         expert_hidden_dim=64, use_gradient_routing=False)
+    cfg = GraftNetConfig(
+        embed_dim=32,
+        num_experts=4,
+        experts_topk=2,
+        expert_hidden_dim=64,
+        use_gradient_routing=False,
+    )
     module = GradientRoutedExperts(cfg)
     x = torch.randn(2, 6, 32)
     out = module(x)

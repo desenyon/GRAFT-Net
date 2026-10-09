@@ -1,6 +1,3 @@
-# Ablation: no latent topology (H3 control)
-defaults:
-  - override /model: graft_net
-
+# @package _global_
 model:
   use_latent_topology: false

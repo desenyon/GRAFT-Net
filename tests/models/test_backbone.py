@@ -8,6 +8,7 @@ from graft_net.models.config import GraftNetConfig
 
 def _small_cfg(**kwargs: object) -> GraftNetConfig:
     from dataclasses import replace
+
     base = GraftNetConfig()
     return replace(base.smoke_test_variant(), **kwargs)
 

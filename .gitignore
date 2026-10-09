@@ -82,3 +82,7 @@ multirun/
 # Profiling
 *.prof
 *.trace
+
+# Validation output
+coverage.xml
+.ruff_cache/

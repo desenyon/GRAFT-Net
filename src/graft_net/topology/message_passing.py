@@ -24,10 +24,10 @@ class GraphMessagePassing(nn.Module):
         Returns:
             agg: (B, N, D) aggregated node representations.
         """
-        msgs = self.msg_proj(x)             # (B, N, D)
+        msgs = self.msg_proj(x)  # (B, N, D)
         # adj: (B, N, N) — adj[b, i, j]=True means i receives from j
         # Weighted average of incoming messages
-        adj_float = adj.float()
+        adj_float = adj.to(msgs.dtype)
         deg = adj_float.sum(dim=-1, keepdim=True).clamp(min=1.0)  # (B, N, 1)
-        agg = torch.bmm(adj_float, msgs) / deg                    # (B, N, D)
+        agg = torch.bmm(adj_float, msgs) / deg  # (B, N, D)
         return self.out_proj(agg)

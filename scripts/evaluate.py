@@ -1,47 +1,26 @@
-"""CLI evaluation entrypoint.
+"""Reconstruct the saved experiment and evaluate its held-out synthetic split."""
 
-Usage::
-
-    python scripts/evaluate.py \
-        task=sequence_classification \
-        checkpoint=outputs/sequence_classification/graft_net/checkpoint_step80.pt
-"""
-
-from __future__ import annotations
-
+import json
 import logging
 from pathlib import Path
 
 import hydra
 from omegaconf import DictConfig
 
-log = logging.getLogger(__name__)
+from graft_net.train.trainer import Trainer
 
 
 @hydra.main(version_base="1.3", config_path="../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
-    from graft_net.eval.evaluator import Evaluator
-    from graft_net.models.config import GraftNetConfig
-    from graft_net.train.trainer import Trainer
-    from graft_net.utils.seeding import set_seed
-
-    set_seed(int(cfg.model.get("seed", 42)))
-
-    output_dir = Path("outputs") / cfg.task.name / cfg.model.model_name
-    trainer = Trainer.for_smoke_test(
-        output_dir=output_dir,
-        task_name=cfg.task.name,
-        num_classes=int(cfg.task.get("num_classes", 10)),
+    if not cfg.checkpoint:
+        raise ValueError("checkpoint=<path> is required for evaluation")
+    output_dir = Path(cfg.output_dir)
+    trainer = Trainer.from_checkpoint(
+        Path(cfg.checkpoint), output_dir=output_dir, device=cfg.compute.device
     )
-
-    ckpt_path = cfg.get("checkpoint", None)
-    if ckpt_path:
-        trainer.load_checkpoint(Path(ckpt_path))
-        log.info("Loaded checkpoint: %s", ckpt_path)
-
-    metrics = trainer._eval_epoch()
-    for k, v in metrics.items():
-        log.info("  %s: %.4f", k, v)
+    metrics = trainer.evaluate()
+    (output_dir / "metrics.json").write_text(json.dumps(metrics, indent=2))
+    logging.getLogger(__name__).info("Evaluation: %s", metrics)
 
 
 if __name__ == "__main__":
