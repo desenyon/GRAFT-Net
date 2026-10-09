@@ -1,0 +1,4 @@
+include README.md CHANGELOG.md RESEARCH.md requirements.txt
+recursive-include configs *.yaml
+recursive-include scripts *.py
+recursive-include docs *.md

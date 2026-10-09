@@ -25,8 +25,12 @@ def plot_gradient_utility(
     """
     import torch.nn.functional as F
 
-    pred_flat = F.softmax(predicted.detach().cpu().reshape(-1, predicted.shape[-1]), dim=-1).numpy().ravel()
-    actual_flat = F.softmax(actual.detach().cpu().reshape(-1, actual.shape[-1]), dim=-1).numpy().ravel()
+    pred_flat = (
+        F.softmax(predicted.detach().cpu().reshape(-1, predicted.shape[-1]), dim=-1).numpy().ravel()
+    )
+    actual_flat = (
+        F.softmax(actual.detach().cpu().reshape(-1, actual.shape[-1]), dim=-1).numpy().ravel()
+    )
 
     # Sub-sample for visibility
     max_pts = 5000

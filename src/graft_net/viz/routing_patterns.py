@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-import torch
 from torch import Tensor
 
 
@@ -15,10 +14,10 @@ def plot_routing_heatmap(
     title: str = "Expert Routing Heatmap",
     sample_idx: int = 0,
 ) -> None:
-    """Plot token × expert routing probability heatmap.
+    """Plot token x expert routing probability heatmap.
 
     Args:
-        routing_scores: (B, N, E) routing logits or probabilities.
+        routing_scores: (B, N, E) routing logits.
         output_path: Where to save the figure.
         sample_idx: Batch element to visualise.
         title: Plot title.

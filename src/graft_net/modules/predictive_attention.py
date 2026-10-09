@@ -4,7 +4,7 @@ Queries are derived from a predicted future latent state rather than the current
 This is GRAFT-Net's core attention hypothesis (H1).
 
 Ablation path: when use_predictive_attention=False, queries derive from current state
-(standard multi-head attention) and future_state = attended (identity short-circuit).
+(standard multi-head attention) and future_state = x (identity short-circuit).
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ from graft_net.models.config import GraftNetConfig
 
 @dataclass
 class PredictiveAttentionOutput:
-    attended: Tensor       # (B, N, D) output after attention
-    future_state: Tensor   # (B, N, D) predicted future representation
+    attended: Tensor  # (B, N, D) output after attention
+    future_state: Tensor  # (B, N, D) predicted future representation
     attention_weights: Tensor  # (B, H, N, N) attention probabilities
 
 
@@ -69,18 +69,18 @@ class PredictiveAttention(nn.Module):
         dh = self.head_dim
 
         if self.cfg.use_predictive_attention:
-            future_state = self.predictor(x)          # (B, N, D)
+            future_state = self.predictor(x)  # (B, N, D)
             q_src = future_state
         else:
-            future_state = x                          # bypass: identity
+            future_state = x  # bypass: identity
             q_src = x
 
         q = self.q_proj(q_src).view(b, n, h, dh).transpose(1, 2)  # (B, H, N, dh)
         k = self.k_proj(x).view(b, n, h, dh).transpose(1, 2)
         v = self.v_proj(x).view(b, n, h, dh).transpose(1, 2)
 
-        scale = dh ** -0.5
-        scores = torch.matmul(q, k.transpose(-2, -1)) * scale      # (B, H, N, N)
+        scale = dh**-0.5
+        scores = torch.matmul(q, k.transpose(-2, -1)) * scale  # (B, H, N, N)
 
         if attention_mask is not None:
             # attention_mask: (B, N) True = keep
@@ -90,7 +90,7 @@ class PredictiveAttention(nn.Module):
         weights = F.softmax(scores, dim=-1)
         weights = self.dropout(weights)
 
-        attended = torch.matmul(weights, v)                         # (B, H, N, dh)
+        attended = torch.matmul(weights, v)  # (B, H, N, dh)
         attended = attended.transpose(1, 2).contiguous().view(b, n, d)
         attended = self.out_proj(attended)
 

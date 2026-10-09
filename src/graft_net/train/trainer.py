@@ -1,31 +1,30 @@
-"""Shared Trainer with MLflow tracking, checkpointing, and AMP support."""
+"""Shared task trainer with explicit tracking, reproducible checkpoints, and AMP."""
 
 from __future__ import annotations
 
-import math
+import json
+import random
 import time
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
 import torch
-import torch.nn as nn
-from torch.cuda.amp import GradScaler
+from omegaconf import DictConfig, OmegaConf
+from torch import nn
 from torch.optim import AdamW
+from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 
-from graft_net.data.sequence_synthetic import SyntheticSequenceDataset
+from graft_net.eval.evaluator import evaluate
 from graft_net.losses.total import compute_total_loss
 from graft_net.models.config import GraftNetConfig
-from graft_net.tasks.sequence_classification import SequenceClassificationModel
 from graft_net.utils.logging import get_logger
-from graft_net.utils.seeding import set_seed
 
 logger = get_logger(__name__)
 
 
 class Trainer:
-    """Training loop with MLflow logging, gradient clipping, and AMP."""
-
     def __init__(
         self,
         model: nn.Module,
@@ -33,135 +32,127 @@ class Trainer:
         val_loader: DataLoader,
         cfg: GraftNetConfig,
         output_dir: Path,
+        *,
+        device: str = "auto",
+        experiment_config: DictConfig | None = None,
     ) -> None:
-        self.model = model
-        self.train_loader = train_loader
-        self.val_loader = val_loader
         self.cfg = cfg
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-
+        self.experiment_config = experiment_config
+        if device == "auto":
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        if device not in ("cpu", "cuda", "mps"):
+            raise ValueError("device must be cpu, cuda, mps, or auto")
+        self.device = torch.device(device)
+        self.model = model.to(self.device)
+        self.train_loader, self.val_loader = train_loader, val_loader
         self.optimizer = AdamW(
-            model.parameters(),
-            lr=cfg.learning_rate,
-            weight_decay=cfg.weight_decay,
+            model.parameters(), lr=cfg.learning_rate, weight_decay=cfg.weight_decay
         )
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model.to(self.device)
-
-        # AMP scaler (no-op on CPU)
+        self.scheduler = LambdaLR(
+            self.optimizer, lambda step: min(1.0, (step + 1) / max(1, cfg.warmup_steps))
+        )
         self.use_amp = cfg.use_amp and self.device.type == "cuda"
-        self.scaler = GradScaler() if self.use_amp else None
-
+        self.scaler = torch.amp.GradScaler("cuda", enabled=self.use_amp)
         self._step = 0
+        self._epoch = 0
+        self.history: dict[str, list[float]] = {}
         self._mlflow_run_id: str | None = None
+        if experiment_config is not None:
+            OmegaConf.save(experiment_config, self.output_dir / "config.yaml", resolve=True)
+        (self.output_dir / "model_config.json").write_text(json.dumps(asdict(cfg), indent=2))
 
-    # ------------------------------------------------------------------ #
-    # Factory methods
-    # ------------------------------------------------------------------ #
+    @classmethod
+    def from_config(cls, config: DictConfig, output_dir: Path | None = None) -> Trainer:
+        from graft_net.experiments import build_trainer
+
+        return build_trainer(config, output_dir)
 
     @classmethod
     def for_smoke_test(
         cls,
-        output_dir: Path | str = "/tmp/graft_smoke",
+        output_dir: Path | str = "/tmp/graft_smoke",  # noqa: S108 - legacy smoke API default
         task_name: str = "sequence_classification",
         num_classes: int = 4,
         seed: int = 42,
-    ) -> "Trainer":
-        """Build a tiny trainer for integration / smoke tests."""
-        set_seed(seed)
-        cfg = GraftNetConfig().smoke_test_variant()
-        cfg = _replace(cfg, task_name=task_name, num_classes=num_classes, seed=seed)
-
-        dataset = SyntheticSequenceDataset(
-            num_samples=32, seq_len=8, embed_dim=cfg.embed_dim, num_classes=num_classes, seed=seed,
+    ) -> Trainer:
+        cfg = replace(
+            GraftNetConfig().smoke_test_variant(),
+            task_name=task_name,
+            num_classes=num_classes,
+            seed=seed,
+            warmup_steps=0,
         )
-        train_ds, val_ds = torch.utils.data.random_split(dataset, [24, 8])
-        train_loader = DataLoader(train_ds, batch_size=8, shuffle=True)
-        val_loader = DataLoader(val_ds, batch_size=8)
-
-        model = SequenceClassificationModel(
-            embed_dim=cfg.embed_dim, num_layers=cfg.num_layers,
-            num_heads=cfg.num_heads, num_classes=num_classes, cfg=cfg,
+        config = OmegaConf.create(
+            {
+                "model": asdict(cfg),
+                "output_dir": str(output_dir),
+                "compute": {"batch_size": 8, "num_workers": 0, "num_threads": 1, "device": "cpu"},
+                "task": {
+                    "name": task_name,
+                    "dataset": "synthetic",
+                    "num_train_samples": 24,
+                    "num_val_samples": 8,
+                    "num_classes": num_classes,
+                    "seq_len": 8,
+                    "context_len": 8,
+                    "num_nodes": 8,
+                    "horizon": 4,
+                    "input_features": 3,
+                    "embed_dim_nodes": cfg.embed_dim,
+                    "edge_prob": 0.3,
+                },
+                "tracking": {"enabled": False},
+            }
         )
-        return cls(model=model, train_loader=train_loader, val_loader=val_loader,
-                   cfg=cfg, output_dir=Path(output_dir))
-
-    # ------------------------------------------------------------------ #
-    # Core training loop
-    # ------------------------------------------------------------------ #
+        return cls.from_config(config)
 
     def run_smoke_epoch(self) -> dict[str, float]:
-        """Run one train + eval epoch; return metric dict."""
-        train_metrics = self._train_epoch()
-        val_metrics = self._eval_epoch()
-        metrics = {**train_metrics, **val_metrics}
-
-        # Try to log to MLflow if available
-        try:
-            import mlflow
-            with mlflow.start_run():
-                mlflow.log_metrics(metrics, step=self._step)
-        except Exception:
-            pass  # MLflow optional for smoke tests
-
-        return metrics
+        return {**self._train_epoch(), **self.evaluate()}
 
     def train(self, num_epochs: int = 10) -> dict[str, list[float]]:
-        """Full training loop with MLflow run."""
-        history: dict[str, list[float]] = {}
-
-        try:
-            import mlflow
-            import subprocess
+        """Train additional epochs; MLflow is opt-in and never silently required."""
+        if num_epochs <= 0:
+            raise ValueError("num_epochs must be positive")
+        tracking = self.experiment_config.get("tracking", {}) if self.experiment_config else {}
+        if tracking.get("enabled", False):
             try:
-                git_hash = subprocess.check_output(
-                    ["git", "rev-parse", "--short", "HEAD"], cwd=self.output_dir.parent,
-                    stderr=subprocess.DEVNULL,
-                ).decode().strip()
-            except Exception:
-                git_hash = "unknown"
-
-            with mlflow.start_run(tags={"git_commit": git_hash}) as run:
+                import mlflow
+            except ImportError as exc:
+                raise RuntimeError("Install graft-net[tracking] to enable MLflow") from exc
+            if tracking.get("uri"):
+                mlflow.set_tracking_uri(tracking["uri"])
+            mlflow.set_experiment(tracking.get("experiment", "graft-net"))
+            with mlflow.start_run() as run:
                 self._mlflow_run_id = run.info.run_id
-                mlflow.log_params({
-                    "embed_dim": self.cfg.embed_dim,
-                    "num_layers": self.cfg.num_layers,
-                    "num_heads": self.cfg.num_heads,
-                    "num_experts": self.cfg.num_experts,
-                    "use_predictive_attention": self.cfg.use_predictive_attention,
-                    "use_latent_topology": self.cfg.use_latent_topology,
-                    "use_gradient_routing": self.cfg.use_gradient_routing,
-                    "task": self.cfg.task_name,
-                    "learning_rate": self.cfg.learning_rate,
-                })
-                history = self._run_epochs(num_epochs)
-        except ImportError:
-            history = self._run_epochs(num_epochs)
+                mlflow.log_params(asdict(self.cfg))
+                self._run_epochs(num_epochs, tracker=mlflow)
+        else:
+            self._run_epochs(num_epochs)
+        return self.history
 
-        return history
-
-    def _run_epochs(self, num_epochs: int) -> dict[str, list[float]]:
-        history: dict[str, list[float]] = {}
-        for epoch in range(num_epochs):
-            train_m = self._train_epoch()
-            val_m = self._eval_epoch()
-            for k, v in {**train_m, **val_m}.items():
-                history.setdefault(k, []).append(v)
-            logger.info(f"Epoch {epoch+1}/{num_epochs}: {train_m | val_m}")
-        return history
+    def _run_epochs(self, num_epochs: int, tracker: Any = None) -> None:
+        for _ in range(num_epochs):
+            metrics = {**self._train_epoch(), **self.evaluate()}
+            self._epoch += 1
+            for name, value in metrics.items():
+                self.history.setdefault(name, []).append(value)
+            if tracker is not None:
+                tracker.log_metrics(metrics, step=self._step)
+            (self.output_dir / "history.json").write_text(json.dumps(self.history, indent=2))
+            logger.info("Epoch %s: %s", self._epoch, metrics)
 
     def _train_epoch(self) -> dict[str, float]:
         self.model.train()
-        total_loss = 0.0
-        n_batches = 0
-        t0 = time.time()
-
+        totals: dict[str, float] = {}
+        count = 0
+        start = time.perf_counter()
         for batch in self.train_loader:
-            batch = {k: v.to(self.device) for k, v in batch.items()}
+            batch = {key: value.to(self.device) for key, value in batch.items()}
+            size = next(iter(batch.values())).shape[0]
             self.optimizer.zero_grad(set_to_none=True)
-
-            with torch.amp.autocast("cuda", enabled=self.use_amp):
+            with torch.autocast(device_type=self.device.type, enabled=self.use_amp):
                 outputs = self.model(batch)
                 losses = compute_total_loss(
                     outputs,
@@ -170,53 +161,103 @@ class Trainer:
                     lambda_topology=self.cfg.lambda_topology,
                     lambda_balance=self.cfg.lambda_balance,
                 )
-
             loss = losses["total"]
-            if self.scaler is not None:
-                self.scaler.scale(loss).backward()
-                self.scaler.unscale_(self.optimizer)
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.cfg.max_grad_norm)
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
-            else:
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.cfg.max_grad_norm)
-                self.optimizer.step()
-
-            total_loss += loss.item()
-            n_batches += 1
+            if not torch.isfinite(loss):
+                raise FloatingPointError(f"Non-finite loss at step {self._step}")
+            self.scaler.scale(loss).backward()
+            self.scaler.unscale_(self.optimizer)
+            torch.nn.utils.clip_grad_norm_(
+                self.model.parameters(), self.cfg.max_grad_norm, error_if_nonfinite=True
+            )
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+            self.scheduler.step()
+            for name, value in losses.items():
+                totals[name] = totals.get(name, 0.0) + value.detach().item() * size
+            count += size
             self._step += 1
+        if count == 0:
+            raise ValueError("Training loader is empty")
+        metrics = {f"train/{name}_loss": value / count for name, value in totals.items()}
+        metrics["train/throughput"] = count / max(time.perf_counter() - start, 1e-9)
+        metrics["train/learning_rate"] = self.optimizer.param_groups[0]["lr"]
+        return metrics
 
-        elapsed = time.time() - t0
+    def evaluate(self) -> dict[str, float]:
         return {
-            "train/task_loss": total_loss / max(n_batches, 1),
-            "train/throughput": len(self.train_loader.dataset) / elapsed,  # type: ignore[arg-type]
+            key.replace("eval/", "val/", 1): value
+            for key, value in evaluate(self.model, self.val_loader, self.device).items()
         }
 
     def _eval_epoch(self) -> dict[str, float]:
-        self.model.eval()
-        total_loss = 0.0
-        n_batches = 0
-        with torch.no_grad():
-            for batch in self.val_loader:
-                batch = {k: v.to(self.device) for k, v in batch.items()}
-                outputs = self.model(batch)
-                losses = compute_total_loss(outputs)
-                total_loss += losses["task"].item()
-                n_batches += 1
-        return {"val/task_loss": total_loss / max(n_batches, 1)}
+        """Compatibility alias; new callers should use evaluate()."""
+        return self.evaluate()
 
     def save_checkpoint(self, path: Path | None = None) -> Path:
-        path = path or self.output_dir / f"checkpoint_step{self._step}.pt"
-        torch.save({"model_state": self.model.state_dict(), "step": self._step}, path)
+        path = Path(path) if path else self.output_dir / f"checkpoint_step{self._step}.pt"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        config = (
+            OmegaConf.to_container(self.experiment_config, resolve=True)
+            if self.experiment_config
+            else None
+        )
+        payload = {
+            "format_version": 2,
+            "model_state": self.model.state_dict(),
+            "model_config": asdict(self.cfg),
+            "experiment_config": config,
+            "optimizer_state": self.optimizer.state_dict(),
+            "scheduler_state": self.scheduler.state_dict(),
+            "scaler_state": self.scaler.state_dict(),
+            "step": self._step,
+            "epoch": self._epoch,
+            "history": self.history,
+            "torch_rng_state": torch.get_rng_state(),
+            "python_rng_state": random.getstate(),
+            "loader_rng_state": self.train_loader.generator.get_state()
+            if self.train_loader.generator
+            else None,
+            "cuda_rng_state": torch.cuda.get_rng_state_all()
+            if self.device.type == "cuda"
+            else None,
+        }
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        torch.save(payload, temporary)
+        temporary.replace(path)
         return path
 
-    def load_checkpoint(self, path: Path) -> None:
-        ckpt = torch.load(path, map_location=self.device, weights_only=True)
+    def load_checkpoint(self, path: Path, *, restore_rng: bool = True) -> None:
+        ckpt = torch.load(path, map_location="cpu", weights_only=True)
+        if "model_config" in ckpt and ckpt["model_config"] != asdict(self.cfg):
+            raise ValueError("Checkpoint model config differs; use Trainer.from_checkpoint()")
         self.model.load_state_dict(ckpt["model_state"])
-        self._step = ckpt.get("step", 0)
+        if "optimizer_state" in ckpt:
+            self.optimizer.load_state_dict(ckpt["optimizer_state"])
+            self.scheduler.load_state_dict(ckpt["scheduler_state"])
+            self.scaler.load_state_dict(ckpt["scaler_state"])
+        self._step, self._epoch = ckpt.get("step", 0), ckpt.get("epoch", 0)
+        self.history = ckpt.get("history", {})
+        if restore_rng and "torch_rng_state" in ckpt:
+            torch.set_rng_state(ckpt["torch_rng_state"])
+            random.setstate(ckpt["python_rng_state"])
+            if self.train_loader.generator is not None and ckpt.get("loader_rng_state") is not None:
+                self.train_loader.generator.set_state(ckpt["loader_rng_state"])
+            if self.device.type == "cuda" and ckpt.get("cuda_rng_state") is not None:
+                torch.cuda.set_rng_state_all(ckpt["cuda_rng_state"])
 
-
-def _replace(cfg: GraftNetConfig, **kwargs: Any) -> GraftNetConfig:
-    from dataclasses import replace
-    return replace(cfg, **kwargs)
+    @classmethod
+    def from_checkpoint(
+        cls, path: Path, *, output_dir: Path | None = None, device: str = "cpu"
+    ) -> Trainer:
+        ckpt = torch.load(path, map_location="cpu", weights_only=True)
+        if not ckpt.get("experiment_config"):
+            raise ValueError(
+                "Checkpoint lacks experiment config; construct a matching Trainer "
+                "and call load_checkpoint"
+            )
+        config = OmegaConf.create(ckpt["experiment_config"])
+        config.compute.device = device
+        config.output_dir = str(output_dir or Path(path).parent / "evaluation")
+        trainer = cls.from_config(config)
+        trainer.load_checkpoint(path)
+        return trainer

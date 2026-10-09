@@ -18,11 +18,10 @@ def masked_softmax(logits: Tensor, mask: Tensor, dim: int = -1) -> Tensor:
     Returns:
         Probabilities with masked positions set to zero.
     """
-    logits = logits.masked_fill(~mask, float("-inf"))
+    logits = logits.masked_fill(~mask, torch.finfo(logits.dtype).min)
     probs = F.softmax(logits, dim=dim)
-    # Replace NaN rows (all-masked) with uniform
-    probs = torch.nan_to_num(probs, nan=0.0)
-    return probs
+    probs = probs * mask
+    return probs / probs.sum(dim=dim, keepdim=True).clamp(min=torch.finfo(probs.dtype).eps)
 
 
 def pairwise_features(x: Tensor) -> Tensor:
@@ -37,7 +36,7 @@ def pairwise_features(x: Tensor) -> Tensor:
     b, n, d = x.shape
     xi = x.unsqueeze(2).expand(b, n, n, d)  # (B, N, N, D)
     xj = x.unsqueeze(1).expand(b, n, n, d)  # (B, N, N, D)
-    return torch.cat([xi, xj], dim=-1)      # (B, N, N, 2D)
+    return torch.cat([xi, xj], dim=-1)  # (B, N, N, 2D)
 
 
 def gelu_approx(x: Tensor) -> Tensor:

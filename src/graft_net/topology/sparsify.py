@@ -20,7 +20,7 @@ def topk_adjacency(scores: Tensor, k: int) -> Tensor:
     k = min(k, m)
 
     # topk along last dim: for each source node i, keep top-k targets j
-    _, top_indices = scores.topk(k, dim=-1)       # (B, N, k)
+    _, top_indices = scores.topk(k, dim=-1)  # (B, N, k)
 
     binary_adj = torch.zeros(b, n, m, dtype=torch.bool, device=scores.device)
     binary_adj.scatter_(-1, top_indices, True)

@@ -1,104 +1,74 @@
-# Reproducibility Guide — GRAFT-Net v0.1.0
+# Reproducibility and experiment evidence
 
-This document provides the exact commands to reproduce all results reported for GRAFT-Net v0.1.0.
-
----
+The supported reproducibility claim is that the code and small synthetic pipelines can be executed and tested. No expected performance table is supplied. The previous illustrative loss table and the historical `RESEARCH.md` do not validate the corrected mechanisms or baseline comparisons.
 
 ## Environment
 
-```bash
-# Python 3.11 required
-python --version   # Python 3.11.x
-
-# Install with pinned dev extras
-pip install -e ".[dev]"
-pip freeze > requirements_frozen.txt
-
-# Verify install
-python -c "import graft_net; print(graft_net.__version__)"
-```
-
-Alternatively, use Docker:
+Use Python 3.11+ in an isolated environment:
 
 ```bash
-docker build -t graft-net:v0.1.0 .
-docker run --rm graft-net:v0.1.0
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install -e ".[dev]"
+python -m pip freeze > outputs-environment.txt
 ```
 
----
+`requirements.txt` pins direct dependencies, not every transitive dependency or platform-specific wheel. Editable installation should keep compatible pins, but always record the final environment. CPU validation is the reference; this project does not promise identical results across PyTorch versions, devices or operating systems.
 
-## Seed Policy
-
-All experiments use `seed=42` by default. The seed is passed through:
-
-1. `GraftNetConfig.seed` → `set_seed(seed)` at start of every run
-2. `SyntheticDataset(seed=seed)` for deterministic splits
-3. Logged as an MLflow parameter on every run
-
----
-
-## Ablation Matrix
-
-Run all five ablation variants (full + 4 ablations) for 30 epochs each:
+## Offline verification
 
 ```bash
-python scripts/run_ablation.py \
-    task=sequence_classification \
-    ablation.num_epochs=30 \
-    compute=local \
-    model.seed=42
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 MPLBACKEND=Agg pytest \
+  --cov=graft_net --cov-report=term-missing --cov-fail-under=75
+ruff check src tests scripts
+ruff format --check src tests scripts
+mypy src/graft_net --ignore-missing-imports
+python -m build
 ```
 
-Results are written to `outputs/ablation/<variant>/metrics.json`.
+The suite uses generated tensors and temporary directories. MLflow is off unless explicitly enabled. The CLI regression tests construct all three task datasets and all four registered backbones, run actual optimization, and compare reconstructed evaluation results.
 
----
-
-## Baseline Comparisons
+## Reproduce a smoke run and evaluation
 
 ```bash
-python scripts/run_benchmarks.py \
-    benchmark.num_epochs=30 \
-    compute=local \
-    model.seed=42
+python scripts/train.py compute=smoke seed=42 output_dir=outputs/repro
+python scripts/evaluate.py checkpoint=outputs/repro/checkpoint_step3.pt \
+  output_dir=outputs/repro-evaluation
+python scripts/train.py compute=smoke resume_from=outputs/repro/checkpoint_step3.pt \
+  training.num_epochs=1 output_dir=outputs/repro-resume
 ```
 
-Results table at `outputs/benchmarks/results.md`.
+The smoke profile has three training batches per epoch. Other batch/sample settings produce different checkpoint step numbers; use the path printed at the end of the run.
 
----
+`config.yaml`, `model_config.json`, `history.json`, and `metrics.json` identify what actually ran. For ordinary runs, metadata includes the Git revision and dirty status, actual backbone class, task, seed, parameter count, Python/PyTorch version, and device. The checkpoint stores the resolved experiment configuration and epoch-boundary state. A direct custom `Trainer` without experiment metadata still requires explicit model and loader reconstruction.
 
-## Paper Figures
+## Seeds, splits and continuation
 
-After running ablation + benchmarks:
+- The root seed defaults to 42 and feeds the model seed; `model.seed` can be explicitly overridden.
+- Python and PyTorch RNG are initialized before construction. Synthetic data uses its own PyTorch generator.
+- A single generated population shares the same class offsets, then disjoint train and validation subsets are selected using `seed + 1`.
+- A separate `seed + 2` generator shuffles training data. Architecture-specific initialization cannot alter its sample order.
+- Validation is not shuffled and uses a separate generator.
+- Format-v2 checkpoints save optimizer, scheduler, scaler, epoch, step, history and relevant RNG states. The regression suite checks exact CPU parameter equality after uninterrupted versus resumed epochs.
+- Guarantees do not extend to mid-epoch restart, distributed training, custom stochastic data-worker state, device changes, or library upgrades.
+
+## Comparisons
 
 ```bash
-python scripts/generate_figures.py
+python scripts/run_ablation.py compute=smoke ablation.num_epochs=1 \
+  output_dir=outputs/repro-ablations
+python scripts/run_benchmarks.py compute=smoke benchmark.num_epochs=1 \
+  output_dir=outputs/repro-benchmarks
 ```
 
-Figures written to `outputs/figures/`.
+Sweep results include configuration and per-run evidence. Increase budgets and repeat with explicit seeds only after smoke checks. Parameter/FLOP matching, real datasets, confidence intervals and external held-out test evaluation are not implemented automatically. The `no_gradient_routing` control changes the expert architecture to a dense FFN; `lambda_grad=0` is the narrower supervision-only control.
 
----
-
-## Expected Results (Indicative, Synthetic Data)
-
-These numbers are on the synthetic datasets shipped with the package and serve as sanity checks only. Real results require task-specific real datasets.
-
-| Variant | val_loss (seq_cls, 30 epochs) |
-|---|---|
-| full_model | ≈ 0.15 |
-| no_predictive_attention | ≈ 0.19 |
-| no_latent_topology | ≈ 0.17 |
-| no_gradient_routing | ≈ 0.18 |
-| no_topology_no_routing | ≈ 0.22 |
-
----
-
-## Test Suite
+Plot recorded history with:
 
 ```bash
-pytest -v \
-    --cov=graft_net \
-    --cov-report=term-missing \
-    --cov-fail-under=75
+python scripts/generate_figures.py --history outputs/repro/history.json \
+  --output-dir outputs/repro/figures
 ```
 
-The test suite must pass with ≥75% coverage before any result is considered reproducible.
+`--demo` generates clearly labeled artificial examples and must not be cited as experiment evidence.

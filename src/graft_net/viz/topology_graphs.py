@@ -6,7 +6,6 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import networkx as nx
-import torch
 from torch import Tensor
 
 
@@ -27,17 +26,25 @@ def plot_topology_graph(
     adj = adjacency[sample_idx].detach().cpu().float().numpy()
     n = adj.shape[0]
 
-    G = nx.DiGraph()
-    G.add_nodes_from(range(n))
+    graph = nx.DiGraph()
+    graph.add_nodes_from(range(n))
     for i in range(n):
         for j in range(n):
             if adj[i, j] > 0.5:
-                G.add_edge(i, j, weight=float(adj[i, j]))
+                graph.add_edge(i, j, weight=float(adj[i, j]))
 
     fig, ax = plt.subplots(figsize=(8, 8))
-    pos = nx.spring_layout(G, seed=42)
-    nx.draw_networkx(G, pos=pos, ax=ax, node_size=200, arrows=True,
-                     node_color="#4C72B0", edge_color="#999999", font_size=8)
+    pos = nx.spring_layout(graph, seed=42)
+    nx.draw_networkx(
+        graph,
+        pos=pos,
+        ax=ax,
+        node_size=200,
+        arrows=True,
+        node_color="#4C72B0",
+        edge_color="#999999",
+        font_size=8,
+    )
     ax.set_title(title)
     ax.axis("off")
 

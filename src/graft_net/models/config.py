@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
@@ -54,10 +54,53 @@ class GraftNetConfig:
     num_classes: int = 10
     forecast_horizon: int = 12
     input_features: int = 7
+    node_input_dim: int | None = None
 
-    def smoke_test_variant(self) -> "GraftNetConfig":
+    def __post_init__(self) -> None:
+        positive = (
+            "embed_dim",
+            "num_heads",
+            "num_layers",
+            "max_seq_len",
+            "predictor_hidden_dim",
+            "predictor_depth",
+            "topology_topk",
+            "topology_edge_hidden",
+            "num_experts",
+            "experts_topk",
+            "expert_hidden_dim",
+            "num_classes",
+            "forecast_horizon",
+            "input_features",
+        )
+        for name in positive:
+            if getattr(self, name) <= 0:
+                raise ValueError(f"{name} must be positive")
+        if self.embed_dim % self.num_heads:
+            raise ValueError("embed_dim must be divisible by num_heads")
+        if self.experts_topk > self.num_experts:
+            raise ValueError("experts_topk must not exceed num_experts")
+        if not 0 <= self.dropout < 1:
+            raise ValueError("dropout must be in [0, 1)")
+        if self.node_input_dim is not None and self.node_input_dim <= 0:
+            raise ValueError("node_input_dim must be positive")
+        if self.learning_rate <= 0 or self.max_grad_norm <= 0:
+            raise ValueError("learning_rate and max_grad_norm must be positive")
+        for name in (
+            "lambda_future",
+            "lambda_grad",
+            "lambda_topology",
+            "lambda_balance",
+            "weight_decay",
+            "warmup_steps",
+        ):
+            if getattr(self, name) < 0:
+                raise ValueError(f"{name} must be nonnegative")
+
+    def smoke_test_variant(self) -> GraftNetConfig:
         """Return a tiny variant suitable for unit tests."""
         from dataclasses import replace
+
         return replace(
             self,
             embed_dim=32,

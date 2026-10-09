@@ -1,9 +1,31 @@
-# Root Hydra config — composes defaults
 defaults:
-  - model: graft_net
-  - compute: local
-  - task: sequence_classification
-  - _self_
-
+- model: graft_net
+- compute: local
+- task: sequence_classification
+- _self_
 seed: 42
 output_dir: outputs/${now:%Y-%m-%d_%H-%M-%S}
+checkpoint: null
+resume_from: null
+training:
+  num_epochs: ${compute.max_epochs}
+ablation:
+  num_epochs: ${training.num_epochs}
+benchmark:
+  num_epochs: ${training.num_epochs}
+  models:
+  - graft_net
+  - transformer
+  - moe_transformer
+  - graph_transformer
+  tasks:
+  - sequence_classification
+  - time_series_forecasting
+  - graph_prediction
+tracking:
+  enabled: false
+  uri: null
+  experiment: graft-net
+hydra:
+  job:
+    chdir: false

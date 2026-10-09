@@ -1,3 +1,13 @@
+> **Historical, unvalidated report.** This document predates the experiment and
+> learning-signal corrections described in the [current README](README.md).
+> The old benchmark runner used renamed ablation combinations instead of the
+> registered baseline architectures; other entrypoints ignored task/config
+> selections, topology lacked task gradients, and router targets copied scores.
+> Its numerical tables and conclusions have not been reproduced against the
+> corrected implementation and must not be treated as validated current results.
+> The original text is retained below for provenance, including claims superseded
+> by this notice. Use `docs/reproducibility.md` for current commands.
+
 # GRAFT-Net v0.1.0 — Research Report
 
 > **Graph-Routed Adaptive Fusion Transformer Network**  

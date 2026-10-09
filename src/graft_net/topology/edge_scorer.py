@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import torch
 import torch.nn as nn
 from torch import Tensor
 
@@ -27,6 +26,6 @@ class MLPEdgeScorer(nn.Module):
         Returns:
             scores: (B, N, N) unnormalised edge logits
         """
-        pairs = pairwise_features(x)          # (B, N, N, 2D)
+        pairs = pairwise_features(x)  # (B, N, N, 2D)
         scores = self.net(pairs).squeeze(-1)  # (B, N, N)
         return scores

@@ -16,8 +16,9 @@ def test_time_series_model_predicts_forecast_horizon() -> None:
 
 
 def test_time_series_backward_passes() -> None:
-    model = TimeSeriesForecastingModel(embed_dim=32, num_layers=2, num_heads=4,
-                                       horizon=4, input_features=3)
+    model = TimeSeriesForecastingModel(
+        embed_dim=32, num_layers=2, num_heads=4, horizon=4, input_features=3
+    )
     batch = {"inputs": torch.randn(2, 12, 3), "targets": torch.randn(2, 4, 3)}
     out = model(batch)
     out["task_loss"].backward()

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import torch
 import torch.nn as nn
 from torch import Tensor
 
@@ -47,8 +46,8 @@ class ForecastingHead(nn.Module):
         Returns:
             predictions: (B, horizon, input_features)
         """
-        pooled = hidden[:, -1, :]                          # use last token
-        out = self.proj(pooled)                            # (B, horizon * features)
+        pooled = hidden[:, -1, :]  # use last token
+        out = self.proj(pooled)  # (B, horizon * features)
         return out.view(hidden.shape[0], self.horizon, self.input_features)
 
 

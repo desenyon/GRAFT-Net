@@ -20,11 +20,11 @@ def load_balance_loss(routing_scores: Tensor) -> Tensor:
     Returns:
         Scalar load-balance penalty.
     """
-    probs = F.softmax(routing_scores, dim=-1)          # (B, N, E)
-    b, n, e = probs.shape
+    probs = F.softmax(routing_scores, dim=-1)  # (B, N, E)
+    _b, _n, e = probs.shape
     # Fraction of tokens selecting each expert (via argmax)
-    expert_idx = probs.argmax(-1)                      # (B, N)
+    expert_idx = probs.argmax(-1)  # (B, N)
     one_hot = F.one_hot(expert_idx, num_classes=e).float()  # (B, N, E)
-    f_i = one_hot.mean(dim=(0, 1))                     # (E,)
-    p_i = probs.mean(dim=(0, 1))                       # (E,)
+    f_i = one_hot.mean(dim=(0, 1))  # (E,)
+    p_i = probs.mean(dim=(0, 1))  # (E,)
     return e * (f_i * p_i).sum()

@@ -31,3 +31,12 @@ def test_latent_topology_hard_adjacency_is_bool() -> None:
     x = torch.randn(1, 6, 16)
     out = module(x)
     assert out.hard_adjacency.dtype == torch.bool
+
+
+def test_half_precision_masked_topology_diagnostics_are_finite():
+    cfg = GraftNetConfig(embed_dim=16, topology_topk=2, topology_edge_hidden=16)
+    module = LatentTopologyModule(cfg).half()
+    mask = torch.tensor([[True, True, False, False]])
+    out = module(torch.randn(1, 4, 16).half(), attention_mask=mask)
+    assert torch.isfinite(out.graph_entropy)
+    assert torch.isfinite(out.graph_state).all()

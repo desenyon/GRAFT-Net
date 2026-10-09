@@ -31,6 +31,7 @@ def test_total_loss_total_is_weighted_sum() -> None:
         "routing_targets": torch.zeros(1, 2, 3),
         "soft_adjacency": torch.full((1, 2, 2), 0.5),
     }
-    loss = compute_total_loss(outputs, lambda_future=0.0, lambda_grad=0.0,
-                               lambda_topology=0.0, lambda_balance=0.0)
+    loss = compute_total_loss(
+        outputs, lambda_future=0.0, lambda_grad=0.0, lambda_topology=0.0, lambda_balance=0.0
+    )
     assert torch.isclose(loss["total"], torch.tensor(2.0))
